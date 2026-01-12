@@ -1,0 +1,13 @@
+{
+  "name": "yjs-server",
+  "version": "1.0.0",
+  "private": true,
+  "scripts": {
+    "start": "npx y-websocket --port 1234"
+  },
+  
+  "dependencies": {
+    "y-websocket": "^1.4.5",
+    "yjs": "^13.6.28"
+  }
+}
