@@ -50,7 +50,7 @@ const authMiddleware = (req, res, next) => {
   });
 };
 
-// --- 4. AUTH ROUTES (Register & Login) ---
+// --- 4. AUTH ROUTES ---
 app.post("/api/auth/register", async (req, res) => {
   try {
     const { username, email, password } = req.body;
@@ -77,22 +77,27 @@ app.post("/api/auth/login", async (req, res) => {
   }
 });
 
-// --- 5. DOCUMENT ROUTES (New, Share, Save, Delete) ---
+// --- 5. DOCUMENT ROUTES ---
 
-// Fetch all documents (for Sidebar)
+// FETCH ALL: Get notes where user is OWNER OR COLLABORATOR
 app.get("/api/documents", authMiddleware, async (req, res) => {
   try {
-    const docs = await Document.find({ owner: req.userId }).sort({ updatedAt: -1 });
+    const docs = await Document.find({
+      $or: [
+        { owner: req.userId },
+        { collaborators: req.userId }
+      ]
+    }).sort({ updatedAt: -1 });
     res.json(docs);
   } catch (err) {
     res.status(500).json({ error: "Failed to fetch documents" });
   }
 });
 
-// CREATE Route
+// CREATE: New note
 app.post("/api/documents/new", authMiddleware, async (req, res) => {
   try {
-    const newDoc = new Document({ title: "Untitled Note", content: "", owner: req.userId });
+    const newDoc = new Document({ title: "Untitled Note", owner: req.userId });
     await newDoc.save();
     res.status(201).json(newDoc);
   } catch (err) {
@@ -100,23 +105,29 @@ app.post("/api/documents/new", authMiddleware, async (req, res) => {
   }
 });
 
-// SHARE/LOAD Route (Fixes the 404 for /share)
+// SHARE/LOAD: Load note if user is owner or collaborator
 app.get("/api/documents/share/:id", authMiddleware, async (req, res) => {
   try {
-    const doc = await Document.findOne({ _id: req.params.id, owner: req.userId });
-    if (!doc) return res.status(404).json({ error: "Document not found" });
+    const doc = await Document.findOne({ 
+      _id: req.params.id, 
+      $or: [{ owner: req.userId }, { collaborators: req.userId }] 
+    });
+    if (!doc) return res.status(404).json({ error: "Document not found or access denied" });
     res.json(doc);
   } catch (err) {
     res.status(500).json({ error: "Load failed" });
   }
 });
 
-// SAVE/UPDATE Route (Fixes the 404 for /save)
+// SAVE/UPDATE: Update title
 app.put("/api/documents/save/:id", authMiddleware, async (req, res) => {
   try {
     const { title } = req.body;
     const doc = await Document.findOneAndUpdate(
-      { _id: req.params.id, owner: req.userId },
+      { 
+        _id: req.params.id, 
+        $or: [{ owner: req.userId }, { collaborators: req.userId }] 
+      },
       { title },
       { new: true }
     );
@@ -126,10 +137,32 @@ app.put("/api/documents/save/:id", authMiddleware, async (req, res) => {
   }
 });
 
-// DELETE Route
+// INVITE: Add a collaborator by email
+app.post("/api/documents/share/:id", authMiddleware, async (req, res) => {
+  try {
+    const { email } = req.body;
+    const userToInvite = await User.findOne({ email });
+    
+    if (!userToInvite) return res.status(404).json({ error: "User not found" });
+
+    const doc = await Document.findOne({ _id: req.params.id, owner: req.userId });
+    if (!doc) return res.status(403).json({ error: "Only the owner can invite others" });
+
+    if (!doc.collaborators.includes(userToInvite._id)) {
+      doc.collaborators.push(userToInvite._id);
+      await doc.save();
+    }
+    res.json({ message: "Invited successfully" });
+  } catch (err) {
+    res.status(500).json({ error: "Invite failed" });
+  }
+});
+
+// DELETE: Only owner can delete
 app.delete("/api/documents/:id", authMiddleware, async (req, res) => {
   try {
-    await Document.findOneAndDelete({ _id: req.params.id, owner: req.userId });
+    const result = await Document.findOneAndDelete({ _id: req.params.id, owner: req.userId });
+    if (!result) return res.status(403).json({ error: "Access denied or not found" });
     res.json({ message: "Deleted successfully" });
   } catch (err) {
     res.status(500).json({ error: "Delete failed" });
@@ -154,7 +187,7 @@ server.on('upgrade', (request, socket, head) => {
   }
 });
 
-app.get("/", (req, res) => res.send("Collaborative Server is Live 🚀"));
+app.get("/", (req, res) => res.send("Collaborative Server Live 🚀"));
 
 server.listen(PORT, "0.0.0.0", () => {
   console.log(`Server live on port ${PORT}`);
