@@ -1,5 +1,3 @@
-
-
 import React, { useState, useEffect, useCallback } from "react";
 import { Routes, Route, useNavigate, useParams } from "react-router-dom";
 import Sidebar from "./components/Sidebar";
@@ -25,10 +23,14 @@ function App() {
   const [token, setToken] = useState(localStorage.getItem("token"));
   const [documents, setDocuments] = useState([]);
 
+  // DYNAMIC URL: Uses Vercel environment variable or falls back to your Render URL
+  const API_BASE_URL = process.env.REACT_APP_API_URL || "https://real-time-collaborative-noteseditor.onrender.com";
+
   const fetchDocs = useCallback(async () => {
     if (!token) return;
     try {
-      const res = await fetch("http://localhost:5000/api/documents", {
+      // UPDATED: Replaced localhost with API_BASE_URL
+      const res = await fetch(`${API_BASE_URL}/api/documents`, {
         headers: { 
           "Authorization": `Bearer ${token}`,
           "Content-Type": "application/json"
@@ -40,8 +42,10 @@ function App() {
       } else if (res.status === 401 || res.status === 403) {
         handleLogout(); 
       }
-    } catch (err) { console.error("Fetch error:", err); }
-  }, [token]);
+    } catch (err) { 
+      console.error("Fetch error:", err); 
+    }
+  }, [token, API_BASE_URL]); // Added API_BASE_URL to dependencies
 
   useEffect(() => {
     if (token) fetchDocs();
