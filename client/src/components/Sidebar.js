@@ -5,8 +5,10 @@ export default function Sidebar({ documents, setDocuments }) {
   const { id: currentId } = useParams();
   const navigate = useNavigate();
 
+  // Define the dynamic API base URL
+  const API_BASE_URL = process.env.REACT_APP_API_URL || "https://real-time-collaborative-noteseditor.onrender.com";
+
   const createNewDoc = async () => {
-    // 1. Always pull the latest token from storage right before the call
     const token = localStorage.getItem("token");
     
     if (!token) {
@@ -15,8 +17,8 @@ export default function Sidebar({ documents, setDocuments }) {
     }
 
     try {
-      // 2. Explicitly define the POST method
-      const res = await fetch("http://localhost:5000/api/documents/new", {
+      // UPDATED: Replaced localhost with API_BASE_URL
+      const res = await fetch(`${API_BASE_URL}/api/documents/new`, {
         method: "POST",
         headers: { 
           "Authorization": `Bearer ${token}`, 
@@ -24,17 +26,14 @@ export default function Sidebar({ documents, setDocuments }) {
         },
       });
 
-      // 3. Handle specific error codes
       if (res.status === 404) {
-        console.error("The server says this route does not exist. Check server/index.js for app.post('/api/documents/new')");
+        console.error("Route not found. Check server/index.js for /api/documents/new");
         return;
       }
 
       if (res.ok) {
         const newDoc = await res.json();
-        // Update the global state list (lifting state up)
         setDocuments([newDoc, ...documents]);
-        // Move the user to the new doc
         navigate(`/document/${newDoc._id}`);
       } else {
         const errorData = await res.json();
@@ -53,7 +52,8 @@ export default function Sidebar({ documents, setDocuments }) {
     if (!window.confirm("Are you sure you want to delete this note?")) return;
 
     try {
-      const res = await fetch(`http://localhost:5000/api/documents/${docId}`, {
+      // UPDATED: Replaced localhost with API_BASE_URL
+      const res = await fetch(`${API_BASE_URL}/api/documents/${docId}`, {
         method: "DELETE",
         headers: { "Authorization": `Bearer ${token}` },
       });
