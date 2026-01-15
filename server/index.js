@@ -8,7 +8,7 @@ const http = require("http");
 const WebSocket = require('ws');
 const { setupWSConnection } = require('y-websocket/bin/utils');
 
-// Models (Ensure these files exist in your /models folder)
+// Models
 const User = require("./models/User");
 const Document = require("./models/Document");
 
@@ -50,7 +50,7 @@ const authMiddleware = (req, res, next) => {
   });
 };
 
-// --- 4. AUTH ROUTES ---
+// --- 4. AUTH ROUTES (Register & Login) ---
 app.post("/api/auth/register", async (req, res) => {
   try {
     const { username, email, password } = req.body;
@@ -77,9 +77,9 @@ app.post("/api/auth/login", async (req, res) => {
   }
 });
 
-// --- 5. DOCUMENT ROUTES (Fixes the 404s) ---
+// --- 5. DOCUMENT ROUTES (New, Share, Save, Delete) ---
 
-// Fetch all documents for user
+// Fetch all documents (for Sidebar)
 app.get("/api/documents", authMiddleware, async (req, res) => {
   try {
     const docs = await Document.find({ owner: req.userId }).sort({ updatedAt: -1 });
@@ -89,22 +89,44 @@ app.get("/api/documents", authMiddleware, async (req, res) => {
   }
 });
 
-// Create new document
+// CREATE Route
 app.post("/api/documents/new", authMiddleware, async (req, res) => {
   try {
-    const newDoc = new Document({
-      title: "Untitled Note",
-      content: "",
-      owner: req.userId,
-    });
+    const newDoc = new Document({ title: "Untitled Note", content: "", owner: req.userId });
     await newDoc.save();
     res.status(201).json(newDoc);
   } catch (err) {
-    res.status(500).json({ error: "Failed to create document" });
+    res.status(500).json({ error: "Creation failed" });
   }
 });
 
-// Delete document
+// SHARE/LOAD Route (Fixes the 404 for /share)
+app.get("/api/documents/share/:id", authMiddleware, async (req, res) => {
+  try {
+    const doc = await Document.findOne({ _id: req.params.id, owner: req.userId });
+    if (!doc) return res.status(404).json({ error: "Document not found" });
+    res.json(doc);
+  } catch (err) {
+    res.status(500).json({ error: "Load failed" });
+  }
+});
+
+// SAVE/UPDATE Route (Fixes the 404 for /save)
+app.put("/api/documents/save/:id", authMiddleware, async (req, res) => {
+  try {
+    const { title } = req.body;
+    const doc = await Document.findOneAndUpdate(
+      { _id: req.params.id, owner: req.userId },
+      { title },
+      { new: true }
+    );
+    res.json(doc);
+  } catch (err) {
+    res.status(500).json({ error: "Update failed" });
+  }
+});
+
+// DELETE Route
 app.delete("/api/documents/:id", authMiddleware, async (req, res) => {
   try {
     await Document.findOneAndDelete({ _id: req.params.id, owner: req.userId });
@@ -132,8 +154,7 @@ server.on('upgrade', (request, socket, head) => {
   }
 });
 
-// Health check
-app.get("/", (req, res) => res.send("Collaborative Server Running 🚀"));
+app.get("/", (req, res) => res.send("Collaborative Server is Live 🚀"));
 
 server.listen(PORT, "0.0.0.0", () => {
   console.log(`Server live on port ${PORT}`);
