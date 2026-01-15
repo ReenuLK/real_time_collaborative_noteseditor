@@ -6,7 +6,7 @@ const bcrypt = require("bcryptjs");
 const mongoose = require("mongoose");
 const User = require("./models/User");
 const Document = require("./models/Document");
-const { setupWSConnection } = require('y-websocket/bin/utils.js');
+const { setupWSConnection } = require('y-websocket/bin/utils');
 const WebSocket = require('ws');
 
 
