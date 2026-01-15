@@ -1,17 +1,22 @@
 import React, { useState } from "react";
-import { useNavigate } from "react-router-dom"; // Hook for navigation
+import { useNavigate } from "react-router-dom"; 
 
 export default function Login() {
   const [isRegister, setIsRegister] = useState(false);
   const [formData, setFormData] = useState({ email: "", password: "", username: "" });
   const navigate = useNavigate();
 
+  // This grabs the URL from your Vercel Environment Variables
+  // We add a fallback URL just in case the variable fails to load
+  const API_BASE_URL = process.env.REACT_APP_API_URL || "https://real-time-collaborative-noteseditor.onrender.com";
+
   const handleSubmit = async (e) => {
     e.preventDefault();
     const endpoint = isRegister ? "/api/auth/register" : "/api/auth/login";
     
     try {
-      const response = await fetch(`http://localhost:5000${endpoint}`, {
+      // UPDATED: Now uses the dynamic API_BASE_URL instead of localhost
+      const response = await fetch(`${API_BASE_URL}${endpoint}`, {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify(formData),
@@ -29,8 +34,7 @@ export default function Login() {
           localStorage.setItem("username", data.username);
           
           // 2. REDIRECT & REFRESH
-          // We use window.location.href instead of navigate("/") here 
-          // to force App.js to re-run and show the Sidebar immediately.
+          // Forces App.js to re-run and show the Sidebar immediately
           window.location.href = "/"; 
         }
       } else {
