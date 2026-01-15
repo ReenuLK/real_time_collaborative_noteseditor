@@ -7,12 +7,10 @@ import { WebsocketProvider } from "y-websocket";
 import { useParams } from "react-router-dom";
 
 // --- PRODUCTION CONFIGURATION ---
-// These will pull from your Vercel Environment Variables
-const WS_URL = process.env.REACT_APP_WS_URL || "ws://localhost:5000/ws";
-const API_URL = process.env.REACT_APP_API_URL || "http://localhost:5000/api";
+const API_URL = process.env.REACT_APP_API_URL || "https://real-time-collaborative-noteseditor.onrender.com";
+const WS_URL = process.env.REACT_APP_WS_URL || "wss://real-time-collaborative-noteseditor.onrender.com/ws";
 const INITIAL_VALUE = [{ type: "paragraph", children: [{ text: "" }] }];
 
-// Component for rendering custom text styles
 const Leaf = ({ attributes, children, leaf }) => {
   if (leaf.bold) children = <strong>{children}</strong>;
   if (leaf.italic) children = <em>{children}</em>;
@@ -24,18 +22,12 @@ const Leaf = ({ attributes, children, leaf }) => {
   return <span {...attributes} style={style}>{children}</span>;
 };
 
-// Toolbar Helper logic
 const toggleMark = (editor, format) => {
   const marks = SlateEditor.marks(editor);
   const isActive = marks ? marks[format] === true : false;
-  if (isActive) {
-    SlateEditor.removeMark(editor, format);
-  } else {
-    SlateEditor.addMark(editor, format, true);
-  }
+  isActive ? SlateEditor.removeMark(editor, format) : SlateEditor.addMark(editor, format, true);
 };
 
-// Component for rendering other users' cursors
 function RemoteCursors({ awareness, editor }) {
   const [remoteCursors, setRemoteCursors] = useState([]);
   
@@ -57,9 +49,7 @@ function RemoteCursors({ awareness, editor }) {
             y: rect.top - parentRect.top, 
             height: rect.height 
           });
-        } catch (e) {
-          // Range might be out of sync temporarily
-        }
+        } catch (e) {}
       });
       setRemoteCursors(cursors);
     };
@@ -88,19 +78,17 @@ export default function Editor({ initialTitleFromSidebar, updateLocalTitle }) {
   const connectedRef = useRef(false);
   const providerRef = useRef(null);
 
-  // Initialize Yjs Document
   const ydoc = useMemo(() => new Y.Doc(), [id]);
   const sharedType = useMemo(() => ydoc.get("content", Y.XmlText), [ydoc]);
   
-  // Initialize WebSocket Provider
   const provider = useMemo(() => {
     if (providerRef.current) providerRef.current.destroy();
+    // Using the /ws path to trigger the server's upgrade logic
     const p = new WebsocketProvider(WS_URL, `room-${id}`, ydoc, { connect: true });
     providerRef.current = p;
     return p;
   }, [id, ydoc]);
 
-  // Initialize Slate Editor with Yjs capabilities
   const editor = useMemo(() => withYHistory(withYjs(withReact(createEditor()), sharedType)), [sharedType]);
   const renderLeaf = useCallback(props => <Leaf {...props} />, []);
 
@@ -108,29 +96,23 @@ export default function Editor({ initialTitleFromSidebar, updateLocalTitle }) {
     const init = async () => {
       const token = localStorage.getItem("token");
       try {
-        const res = await fetch(`${API_URL}/load/${id}`, { 
+        // UPDATED: Path matches index.js route
+        const res = await fetch(`${API_URL}/api/documents/share/${id}`, { 
           headers: { "Authorization": `Bearer ${token}` }
         });
         if (res.ok) {
-          const titleHeader = res.headers.get("x-document-title");
-          if (titleHeader) setDocTitle(decodeURIComponent(titleHeader));
-          
-          const arrayBuffer = await res.arrayBuffer();
-          if (arrayBuffer.byteLength > 0) {
-            Y.applyUpdate(ydoc, new Uint8Array(arrayBuffer));
-          }
+          const data = await res.json();
+          if (data.title) setDocTitle(data.title);
         }
       } catch (e) { 
         console.error("Loading Error:", e); 
       }
 
-      // Set user awareness for live cursors
       provider.awareness.setLocalStateField("user", { 
         name: localStorage.getItem("username") || "Anonymous", 
         color: "#" + Math.floor(Math.random() * 16777215).toString(16) 
       });
 
-      // Connect Editor to SharedType
       if (!connectedRef.current) {
         YjsEditor.connect(editor);
         connectedRef.current = true;
@@ -142,7 +124,6 @@ export default function Editor({ initialTitleFromSidebar, updateLocalTitle }) {
     };
 
     init();
-
     return () => { 
       if (connectedRef.current) {
         YjsEditor.disconnect(editor);
@@ -151,33 +132,14 @@ export default function Editor({ initialTitleFromSidebar, updateLocalTitle }) {
     };
   }, [id, editor, provider, sharedType, ydoc]);
 
-  // Auto-save logic (Debounced 2 seconds)
-  useEffect(() => {
-    let timeout;
-    const handleUpdate = () => {
-      clearTimeout(timeout);
-      timeout = setTimeout(async () => {
-        const state = Y.encodeStateAsUpdate(ydoc);
-        await fetch(`${API_URL}/save/${id}`, {
-          method: "POST",
-          headers: { 
-            "Authorization": `Bearer ${localStorage.getItem("token")}`, 
-            "Content-Type": "application/octet-stream" 
-          },
-          body: state,
-        });
-      }, 2000);
-    };
-    ydoc.on("update", handleUpdate);
-    return () => { ydoc.off("update", handleUpdate); clearTimeout(timeout); };
-  }, [ydoc, id]);
-
+  // Auto-save Title logic
   const handleRename = (newTitle) => {
     setDocTitle(newTitle);
     updateLocalTitle(id, newTitle);
     clearTimeout(window.renameTimeout);
     window.renameTimeout = setTimeout(() => {
-      fetch(`${API_URL}/documents/${id}/rename`, {
+      // UPDATED: Path matches index.js route
+      fetch(`${API_URL}/api/documents/save/${id}`, {
         method: "PUT",
         headers: { 
           "Content-Type": "application/json", 
@@ -190,7 +152,8 @@ export default function Editor({ initialTitleFromSidebar, updateLocalTitle }) {
 
   const handleShare = async () => {
     if (!inviteEmail) return;
-    const res = await fetch(`${API_URL}/share/${id}`, {
+    // Note: Ensure your backend index.js has a POST /api/documents/invite route if using this
+    const res = await fetch(`${API_URL}/api/documents/share/${id}`, {
       method: "POST",
       headers: { 
         "Content-Type": "application/json", 
@@ -199,14 +162,13 @@ export default function Editor({ initialTitleFromSidebar, updateLocalTitle }) {
       body: JSON.stringify({ email: inviteEmail }),
     });
     if (res.ok) { 
-      alert("Shared!"); 
+      alert("Invitation sent!"); 
       setInviteEmail(""); 
     }
   };
 
   return (
     <div style={{ padding: "40px", maxWidth: "1000px", margin: "0 auto" }}>
-      {/* Header & Title Section */}
       <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: "30px" }}>
         <input 
           value={docTitle} 
@@ -227,20 +189,16 @@ export default function Editor({ initialTitleFromSidebar, updateLocalTitle }) {
       </div>
 
       <Slate editor={editor} initialValue={INITIAL_VALUE}>
-        {/* Toolbar */}
         <div style={{ display: "flex", gap: "10px", padding: "12px", background: "#f8f9fa", border: "1px solid #ddd", borderRadius: "8px 8px 0 0", borderBottom: "none" }}>
           <button onMouseDown={(e) => { e.preventDefault(); toggleMark(editor, "bold"); }} style={btnStyle}>B</button>
           <button onMouseDown={(e) => { e.preventDefault(); toggleMark(editor, "italic"); }} style={btnStyle}>I</button>
           <button onMouseDown={(e) => { e.preventDefault(); toggleMark(editor, "underline"); }} style={btnStyle}>U</button>
-          
           <select onChange={(e) => SlateEditor.addMark(editor, "fontSize", e.target.value)} style={{ padding: "4px" }}>
             {[14, 16, 18, 20, 24, 32].map(s => <option key={s} value={s}>{s}px</option>)}
           </select>
-          
           <input type="color" onChange={(e) => SlateEditor.addMark(editor, "color", e.target.value)} style={{ border: "none", width: "24px", cursor: "pointer" }} />
         </div>
 
-        {/* Editable Area */}
         <div style={{ position: "relative", border: "1px solid #ddd", background: "white", padding: "40px", minHeight: "60vh", borderRadius: "0 0 8px 8px" }}>
           <RemoteCursors awareness={provider.awareness} editor={editor} />
           <Editable renderLeaf={renderLeaf} style={{ outline: "none", fontSize: "18px" }} />
