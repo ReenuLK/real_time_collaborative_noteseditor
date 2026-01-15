@@ -6,6 +6,9 @@ const bcrypt = require("bcryptjs");
 const mongoose = require("mongoose");
 const User = require("./models/User");
 const Document = require("./models/Document");
+const { setupWSConnection } = require('y-websocket/bin/utils');
+const WebSocket = require('ws');
+
 
 const app = express();
 
@@ -60,6 +63,30 @@ const authMiddleware = (req, res, next) => {
 
 // --- 3. EXPLICIT HOST BINDING ---
 // "0.0.0.0" is required for many cloud hosts to map the internal port to the web
-app.listen(PORT, "0.0.0.0", () => {
-  console.log(`Server is running on port ${PORT} 🚀`);
+// --- 1. Create the HTTP Server ---
+const server = app.listen(PORT, "0.0.0.0", () => {
+  console.log(`API and WebSocket Server running on port ${PORT} 🚀`);
+});
+
+// --- 2. Initialize Yjs WebSocket logic ---
+
+const wss = new WebSocket.Server({ noServer: true });
+
+wss.on('connection', (conn, req) => {
+  // This handles the Yjs document synchronization
+  setupWSConnection(conn, req, { gc: true });
+});
+
+// --- 3. Handle the "Upgrade" (HTTP to WS) ---
+server.on('upgrade', (request, socket, head) => {
+  const { pathname } = new URL(request.url, `http://${request.headers.host}`);
+
+  // You can optionally restrict WebSocket connections to a specific path
+  if (pathname.startsWith('/ws')) {
+    wss.handleUpgrade(request, socket, head, (ws) => {
+      wss.emit('connection', ws, request);
+    });
+  } else {
+    socket.destroy();
+  }
 });
