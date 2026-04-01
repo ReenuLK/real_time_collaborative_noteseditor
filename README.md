@@ -46,8 +46,11 @@ The project follows a three-tier architecture with WebSocket-based real-time syn
 
 real_time_collaborative_noteseditor/
 ├── client/ # React frontend application
+
 ├── server/ # Express backend API
+
 ├── yjs-server/ # CRDT synchronization server
+
 └── README.md # This file
 
 ## Getting Started
