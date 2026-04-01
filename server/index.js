@@ -24,11 +24,27 @@ mongoose.connect(MONGO_URI)
   .then(() => console.log("Connected to Cloud MongoDB ✅"))
   .catch((err) => console.error("MongoDB Connection Error ❌:", err));
 
+
 // --- 2. CORS CONFIGURATION ---
-const frontendUrl = process.env.FRONTEND_URL || "https://real-time-collaborative-noteseditor.vercel.app";
+const allowedOrigins = [
+  "https://real-time-collaborative-noteseditor.vercel.app",
+  "http://localhost:3000" // Good for local development
+];
 
 app.use(cors({
-  origin: frontendUrl,
+  origin: function (origin, callback) {
+    // Allow requests with no origin (like mobile apps or curl requests)
+    if (!origin) return callback(null, true);
+    
+    const isVercelPreview = origin.endsWith(".vercel.app");
+    const isAllowedList = allowedOrigins.indexOf(origin) !== -1;
+
+    if (isAllowedList || isVercelPreview) {
+      callback(null, true);
+    } else {
+      callback(new Error("Not allowed by CORS"));
+    }
+  },
   credentials: true,
   methods: ["GET", "POST", "PUT", "DELETE", "OPTIONS"],
   allowedHeaders: ["Content-Type", "Authorization"]
