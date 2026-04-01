@@ -1,6 +1,5 @@
 
 # Real-Time Collaborative Notes Editor
-
 A Google Docs–like collaborative notes editor enabling real-time multi-user editing using WebSockets and modern web technologies. Multiple users can edit notes simultaneously with instant synchronization, conflict resolution, and persistent storage.
 
 ## Features
